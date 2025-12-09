@@ -73,25 +73,31 @@ async def analyze_sbox_endpoint(payload: SBoxCheckRequest):
     )
 
 @router.post("/encrypt", response_model=CipherResponse)
-async def encrypt_aes_endpoint(payload: EncryptRequest):
+async def encrypt_endpoint(payload: EncryptRequest):
     """
-    Melakukan Enkripsi AES-128 (ECB + PKCS7) menggunakan S-box Custom.
+    Endpoint Enkripsi AES.
+    Menerima: plaintext, sbox, key.
     """
-    if len(payload.sbox) != 256:
-        raise HTTPException(status_code=400, detail="S-box harus 256 elemen.")
-        
-    result_hex = aes_encrypt_custom(payload.plaintext, payload.key, payload.sbox)
+    # Panggil fungsi wrapper full
+    result_hex = aes_encrypt_custom(
+        plaintext=payload.plaintext,
+        sbox=payload.sbox,
+        key=payload.key
+    )
     return CipherResponse(result=result_hex)
 
 @router.post("/decrypt", response_model=CipherResponse)
-async def decrypt_aes_endpoint(payload: DecryptRequest):
+async def decrypt_endpoint(payload: DecryptRequest):
     """
-    Melakukan Dekripsi AES-128 menggunakan S-box Custom yang sama.
+    Endpoint Dekripsi AES.
+    Menerima: ciphertext (hex), sbox, key.
     """
-    if len(payload.sbox) != 256:
-        raise HTTPException(status_code=400, detail="S-box harus 256 elemen.")
-        
-    result_text = aes_decrypt_custom(payload.ciphertext, payload.key, payload.sbox)
+    # Panggil fungsi wrapper full
+    result_text = aes_decrypt_custom(
+        ciphertext=payload.ciphertext,
+        sbox=payload.sbox,
+        key=payload.key
+    )
     return CipherResponse(result=result_text)
 
 @router.post("/upload-sbox", response_model=SBoxUploadResponse)
