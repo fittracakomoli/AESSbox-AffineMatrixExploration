@@ -1,3 +1,4 @@
+__pycache__
 .venv
 app/__pycache__
 app/api/__pycache__
