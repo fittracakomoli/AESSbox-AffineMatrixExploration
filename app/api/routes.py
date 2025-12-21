@@ -7,7 +7,8 @@ from app.schemas.sbox import SBoxResponse, SBoxCheckRequest, SBoxCheckResponse, 
 from app.schemas.analysis import AnalysisResponse
 from app.utils.crypto_metrics import (
     calculate_nl, calculate_sac, calculate_bic, 
-    calculate_lap, calculate_dap
+    calculate_lap, calculate_dap,
+    calculate_du, calculate_ad, calculate_to, calculate_ci
 )
 from app.services.aes_wrapper import aes_encrypt_custom, aes_decrypt_custom
 from app.schemas.cipher import EncryptRequest, DecryptRequest, CipherResponse
@@ -62,6 +63,11 @@ async def analyze_sbox_endpoint(payload: SBoxCheckRequest):
     
     # 5. Hitung DAP 
     dap_val = calculate_dap(sbox)
+
+    du_val = calculate_du(sbox)
+    ad_val = calculate_ad(sbox)
+    to_val = calculate_to(sbox)
+    ci_val = calculate_ci(sbox)
     
     return AnalysisResponse(
         nl=nl_val,
@@ -69,7 +75,11 @@ async def analyze_sbox_endpoint(payload: SBoxCheckRequest):
         bic_nl=bic_res['bic_nl'],
         bic_sac=bic_res['bic_sac'],
         lap=lap_val,
-        dap=dap_val
+        dap=dap_val,
+        du=du_val,
+        ad=ad_val,
+        to=to_val,
+        ci=ci_val
     )
 
 @router.post("/encrypt", response_model=CipherResponse)

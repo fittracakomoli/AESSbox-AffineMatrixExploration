@@ -9,7 +9,6 @@ app = FastAPI(
     description="API Modular untuk generate S-box menggunakan Eksplorasi Matriks Afin."
 )
 
-# Daftar origin yang diizinkan (alamat React kamu)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -17,13 +16,12 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,     # List origin di atas
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],       # Izinkan semua method (GET, POST, PUT, dll)
-    allow_headers=["*"],       # Izinkan semua header
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Daftarkan router dari folder api
 app.include_router(api_router)
 
 if __name__ == "__main__":
