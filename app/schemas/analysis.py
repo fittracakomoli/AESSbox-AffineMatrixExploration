@@ -7,8 +7,7 @@ class AnalysisResponse(BaseModel):
     bic_sac: float      # Bit Independence Criterion - SAC (Target: ~0.5)
     lap: float          # Linear Approximation Probability (Target: 0.0625)
     dap: float          # Differential Approximation Probability (Target: 0.015625)
-
-    du: int  # DU (Nilai mentah max difference, misal: 4)
-    ad: int         # AD (Max: 7 untuk 8-bit)
-    to: float     # TO (Ketahanan DPA)
-    ci: int     # CI (Biasanya 0 untuk S-box AES)
+    du: int             # Differential Uniformity (Target: 4)
+    ad: int             # Algebraic Degree (Target: 7)
+    to: float           # Transparency Order (Target: rendah)
+    ci: int             # Correlation Immunity (Target: tinggi)

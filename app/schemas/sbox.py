@@ -5,6 +5,7 @@ from enum import Enum
 
 class SBoxResponse(BaseModel):
     affine_matrix: List[List[int]]
+    affine_vector: Optional[List[int]] = None
     sbox: List[int]
     is_bijective: bool
     is_balanced: bool
@@ -33,6 +34,7 @@ class ExportFormat(str, Enum):
     JSON = "json"
     CSV = "csv"
     TXT = "txt"
+    XLSX = "xlsx"
 
 class SBoxDownloadRequest(BaseModel):
     sbox: List[int]

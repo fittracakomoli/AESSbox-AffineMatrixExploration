@@ -5,6 +5,7 @@ from app.utils.math_gf2 import (
     apply_affine_transform, 
     INVERSE_TABLE
 )
+from app.core.constants import AES_CONSTANT
 
 def find_valid_sbox():
     """
@@ -29,6 +30,7 @@ def find_valid_sbox():
             # Return hasil berupa dictionary atau tuple
             return {
                 "affine_matrix": candidate_matrix,
+                "affine_vector": [(AES_CONSTANT >> i) & 1 for i in range(8)],
                 "sbox": sbox,
                 "is_bijective": True,
                 "is_balanced": True

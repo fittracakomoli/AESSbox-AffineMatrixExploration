@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import List
+from typing import List, Optional
 
 # --- Model untuk Request Enkripsi ---
 class EncryptRequest(BaseModel):
@@ -29,3 +29,35 @@ class DecryptRequest(BaseModel):
 # --- Model untuk Response (Output) ---
 class CipherResponse(BaseModel):
     result: str          # Berisi Ciphertext (Hex) saat enkripsi, atau Plaintext saat dekripsi
+
+# --- Model untuk Request Enkripsi Gambar ---
+class EncryptImageRequest(BaseModel):
+    sbox: List[int]
+    image_base64: str
+    key: str
+    mime_type: Optional[str] = None
+    filename: Optional[str] = None
+
+    @field_validator('sbox')
+    def check_image_sbox_length(cls, v):
+        if len(v) != 256:
+            raise ValueError('S-box harus memiliki tepat 256 elemen sesuai standar AES.')
+        return v
+
+# --- Model untuk Request Dekripsi Gambar ---
+class DecryptImageRequest(BaseModel):
+    sbox: List[int]
+    ciphertext_base64: str
+    key: str
+    mime_type: Optional[str] = None
+
+    @field_validator('sbox')
+    def check_image_sbox_length(cls, v):
+        if len(v) != 256:
+            raise ValueError('S-box harus memiliki tepat 256 elemen sesuai standar AES.')
+        return v
+
+class ImageCipherResponse(BaseModel):
+    result: str
+    mime_type: Optional[str] = None
+    filename: Optional[str] = None

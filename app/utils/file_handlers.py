@@ -4,60 +4,98 @@ import io
 import re
 from typing import List
 from fastapi import UploadFile, HTTPException
+from openpyxl import load_workbook
+
+def _parse_sbox_token(token) -> int:
+    if isinstance(token, int):
+        return token
+    if isinstance(token, float) and token.is_integer():
+        return int(token)
+    if not isinstance(token, str):
+        raise ValueError("Token bukan string atau angka.")
+    text = token.strip()
+    if not text:
+        raise ValueError("Token kosong.")
+    if text.lower().startswith("0x"):
+        return int(text, 16)
+    if re.search(r"[a-fA-F]", text):
+        return int(text, 16)
+    return int(text, 10)
+
 
 async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
     """
-    Membaca file upload (JSON/CSV/TXT) dan mengonversinya menjadi List[int].
-    Mendukung format Desimal.
+    Membaca file upload (JSON/CSV/TXT/XLSX) dan mengonversinya menjadi List[int].
+    Mendukung format Desimal dan Hex (mis. "5B" atau "0x5B").
     """
     filename = file.filename.lower()
     content = await file.read()
-    
-    # Decode bytes ke string
-    try:
-        text_content = content.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(400, "File harus berupa text (UTF-8).")
-    
+
     sbox_data = []
 
     try:
-        # --- KASUS 1: File JSON ---
-        if filename.endswith(".json"):
-            data = json.loads(text_content)
-            # Handle format { "sbox": [...] } atau langsung [...]
-            if isinstance(data, dict) and "sbox" in data:
-                sbox_data = data["sbox"]
-            elif isinstance(data, list):
-                sbox_data = data
-            else:
-                raise ValueError("JSON harus berisi array atau object dengan key 'sbox'.")
+        # --- KASUS 1: File Excel (.xlsx) ---
+        if filename.endswith(".xlsx"):
+            wb = load_workbook(filename=io.BytesIO(content), data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                for cell in row:
+                    if cell is None:
+                        continue
+                    try:
+                        value = _parse_sbox_token(cell)
+                    except (TypeError, ValueError):
+                        continue
+                    sbox_data.append(value)
 
-        # --- KASUS 2: File CSV (.csv) ---
-        elif filename.endswith(".csv"):
-            f = io.StringIO(text_content)
-            reader = csv.reader(f)
-            for row in reader:
-                for item in row:
-                    # Bersihkan whitespace dan parse int
-                    clean_item = item.strip()
-                    if clean_item:
-                        try:
-                            # Asumsi input adalah DESIMAL (basis 10)
-                            sbox_data.append(int(clean_item))
-                        except ValueError:
-                            continue # Skip header atau text non-angka
-
-        # --- KASUS 3: File Text (.txt) ---
-        elif filename.endswith(".txt"):
-            # TXT mungkin dipisah spasi, tab, atau enter.
-            # Kita gunakan Regex untuk mencari semua angka dalam file.
-            # \d+ cocok dengan angka desimal, -?\d+ jika ada negatif (tapi sbox unsigned)
-            tokens = re.findall(r'\b\d+\b', text_content)
-            sbox_data = [int(t) for t in tokens]
-
+        # Decode bytes ke string untuk format text
         else:
-            raise HTTPException(400, "Format file tidak didukung. Gunakan .json, .csv, atau .txt")
+            try:
+                text_content = content.decode("utf-8")
+            except UnicodeDecodeError:
+                raise HTTPException(400, "File harus berupa text (UTF-8).")
+
+        # --- KASUS 1: File JSON ---
+            if filename.endswith(".json"):
+                data = json.loads(text_content)
+                # Handle format { "sbox": [...] } atau langsung [...]
+                if isinstance(data, dict) and "sbox" in data:
+                    sbox_data = [_parse_sbox_token(item) for item in data["sbox"]]
+                elif isinstance(data, list):
+                    sbox_data = [_parse_sbox_token(item) for item in data]
+                else:
+                    raise ValueError("JSON harus berisi array atau object dengan key 'sbox'.")
+
+            # --- KASUS 2: File CSV (.csv) ---
+            elif filename.endswith(".csv"):
+                f = io.StringIO(text_content)
+                reader = csv.reader(f)
+                for row in reader:
+                    for item in row:
+                        # Bersihkan whitespace dan parse int
+                        clean_item = item.strip()
+                        if clean_item:
+                            try:
+                                sbox_data.append(_parse_sbox_token(clean_item))
+                            except ValueError:
+                                continue # Skip header atau text non-angka
+
+            # --- KASUS 3: File Text (.txt) ---
+            elif filename.endswith(".txt"):
+                # TXT mungkin dipisah spasi, tab, atau enter.
+                # Ambil token sederhana (angka desimal atau hex) dari teks.
+                tokens = re.split(r'[\s,;]+', text_content.strip())
+                sbox_data = []
+                for token in tokens:
+                    if not token:
+                        continue
+                    try:
+                        sbox_data.append(_parse_sbox_token(token))
+                    except ValueError:
+                        continue
+
+            else:
+                raise HTTPException(400, "Format file tidak didukung. Gunakan .json, .csv, .txt, atau .xlsx")
 
     except json.JSONDecodeError:
         raise HTTPException(400, "File JSON rusak/tidak valid.")
@@ -80,31 +118,50 @@ async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
 
 def format_sbox_as_csv(sbox: List[int]) -> io.StringIO:
     """
-    Mengubah S-box menjadi format CSV Grid 16x16 dalam bentuk DESIMAL.
+    Mengubah S-box menjadi format CSV Grid 16x16 dalam bentuk HEX (2 digit).
     """
     output = io.StringIO()
     writer = csv.writer(output)
     
     for i in range(0, 256, 16):
         row_ints = sbox[i : i+16]
-        # PERUBAHAN: Langsung tulis list integer, tidak perlu convert ke hex string
-        writer.writerow(row_ints)
+        row_hex = [f"{val:02X}" for val in row_ints]
+        writer.writerow(row_hex)
         
     output.seek(0)
     return output
 
 def format_sbox_as_txt(sbox: List[int]) -> io.StringIO:
     """
-    Mengubah S-box menjadi format TXT Grid 16x16 dalam bentuk DESIMAL.
+    Mengubah S-box menjadi format TXT Grid 16x16 dalam bentuk HEX (2 digit).
     Dipisahkan dengan spasi.
     """
     output = io.StringIO()
     
     for i in range(0, 256, 16):
         row_ints = sbox[i : i+16]
-        # PERUBAHAN: Convert ke string desimal biasa "99", "124", dst.
-        row_str = " ".join([str(val) for val in row_ints])
+        row_str = " ".join([f"{val:02X}" for val in row_ints])
         output.write(row_str + "\n")
         
+    output.seek(0)
+    return output
+
+def format_sbox_as_xlsx(sbox: List[int]) -> io.BytesIO:
+    """
+    Mengubah S-box menjadi format Excel (XLSX) Grid 16x16 dalam bentuk HEX (2 digit).
+    """
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "S-Box"
+
+    for i in range(0, 256, 16):
+        row_ints = sbox[i : i + 16]
+        row_hex = [f"{val:02X}" for val in row_ints]
+        ws.append(row_hex)
+
+    output = io.BytesIO()
+    wb.save(output)
     output.seek(0)
     return output

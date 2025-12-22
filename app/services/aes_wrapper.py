@@ -1,87 +1,94 @@
-from typing import List
+# app/services/aes_wrapper.py
 from app.utils.aes_engine import AESEngine
+from typing import List
 
-# --- FUNGSI PADDING (PKCS#7) ---
+def _normalize_key(key_str: str) -> bytes:
+    key_bytes = key_str.encode('utf-8')
+    if len(key_bytes) > 16:
+        return key_bytes[:16]
+    return key_bytes.ljust(16, b'\0')
+
 def pad(data: bytes) -> bytes:
-    block_size = 16
-    padding_len = block_size - (len(data) % block_size)
-    padding = bytes([padding_len] * padding_len)
-    return data + padding
+    """PKCS#7 Padding"""
+    length = 16 - (len(data) % 16)
+    return data + bytes([length] * length)
 
 def unpad(data: bytes) -> bytes:
-    padding_len = data[-1]
-    if padding_len > 16 or padding_len == 0:
-        return data # Safety return jika padding rusak
-    return data[:-padding_len]
+    """Remove PKCS#7 Padding"""
+    length = data[-1]
+    if length > 16: return data # Error safety
+    return data[:-length]
 
-# --- FUNGSI UTAMA SESUAI PERMINTAAN ---
+def aes_encrypt_custom(plaintext_str: str, key_str: str, sbox: List[int]) -> str:
+    # 1. Init Engine
+    engine = AESEngine(_normalize_key(key_str), sbox)
 
-def aes_encrypt_custom(plaintext: str, sbox: List[int], key: str) -> str:
-    """
-    Enkripsi AES-128 dengan S-box Custom.
-    Params:
-      plaintext (str): Teks asli.
-      sbox (List[int]): Array 256 integer.
-      key (str): Kunci rahasia (string bebas).
-    Returns:
-      str: Ciphertext dalam format Hexadesimal.
-    """
-    # 1. Format Key menjadi 16 Bytes
-    key_bytes = key.encode('utf-8')
-    if len(key_bytes) > 16:
-        key_bytes = key_bytes[:16]
-    else:
-        key_bytes = key_bytes.ljust(16, b'\0')
+    # 2. Prepare Plaintext (Padding)
+    pt_bytes = pad(plaintext_str.encode('utf-8'))
 
-    # 2. Inisialisasi Engine
-    engine = AESEngine(key_bytes, sbox)
-
-    # 3. Padding Plaintext
-    pt_bytes = pad(plaintext.encode('utf-8'))
-
-    # 4. Enkripsi per Blok (Mode ECB)
-    encrypted_bytes = bytearray()
+    # 3. Encrypt Block by Block (ECB Mode Simplification)
+    encrypted_blocks = []
     for i in range(0, len(pt_bytes), 16):
-        block = pt_bytes[i : i+16]
-        encrypted_block = engine.encrypt_block(block)
-        encrypted_bytes.extend(encrypted_block)
+        block = pt_bytes[i:i+16]
+        encrypted_blocks.append(engine.encrypt_block(block))
 
-    # 5. Return Hex String
-    return encrypted_bytes.hex()
+    return b"".join(encrypted_blocks).hex()
 
+def aes_decrypt_custom(ciphertext_hex: str, key_str: str, sbox: List[int]) -> str:
+    # 1. Init Engine
+    engine = AESEngine(_normalize_key(key_str), sbox)
 
-def aes_decrypt_custom(ciphertext: str, sbox: List[int], key: str) -> str:
-    """
-    Dekripsi AES-128 dengan S-box Custom.
-    Params:
-      ciphertext (str): Hex string hasil enkripsi.
-      sbox (List[int]): Array 256 integer (HARUS SAMA dengan saat enkripsi).
-      key (str): Kunci rahasia (HARUS SAMA).
-    Returns:
-      str: Plaintext asli.
-    """
-    # 1. Format Key menjadi 16 Bytes
-    key_bytes = key.encode('utf-8')
-    if len(key_bytes) > 16:
-        key_bytes = key_bytes[:16]
-    else:
-        key_bytes = key_bytes.ljust(16, b'\0')
-
-    # 2. Inisialisasi Engine (Otomatis generate Inverse S-box)
-    engine = AESEngine(key_bytes, sbox)
-
-    # 3. Decode Hex ke Bytes
+    # 2. Decode Hex
     try:
-        ct_bytes = bytes.fromhex(ciphertext)
-    except ValueError:
-        return "Error: Ciphertext bukan format Hex yang valid."
+        ct_bytes = bytes.fromhex(ciphertext_hex)
+    except:
+        return "Error: Invalid Hex"
 
-    # 4. Dekripsi per Blok
-    decrypted_bytes = bytearray()
+    # 3. Decrypt Block by Block
+    decrypted_blocks = []
     for i in range(0, len(ct_bytes), 16):
-        block = ct_bytes[i : i+16]
-        decrypted_block = engine.decrypt_block(block)
-        decrypted_bytes.extend(decrypted_block)
+        block = ct_bytes[i:i+16]
+        decrypted_blocks.append(engine.decrypt_block(block))
 
-    # 5. Unpad dan Return String
-    return unpad(decrypted_bytes).decode('utf-8', errors='ignore')
+    full_decrypted = b"".join(decrypted_blocks)
+
+    # 4. Unpad
+    return unpad(full_decrypted).decode('utf-8', errors='ignore')
+
+def aes_encrypt_bytes(data: bytes, key_str: str, sbox: List[int]) -> bytes:
+    engine = AESEngine(_normalize_key(key_str), sbox)
+    padded = pad(data)
+    encrypted_blocks = []
+    for i in range(0, len(padded), 16):
+        block = padded[i:i+16]
+        encrypted_blocks.append(engine.encrypt_block(block))
+    return b"".join(encrypted_blocks)
+
+def aes_decrypt_bytes(ciphertext: bytes, key_str: str, sbox: List[int]) -> bytes:
+    engine = AESEngine(_normalize_key(key_str), sbox)
+    decrypted_blocks = []
+    for i in range(0, len(ciphertext), 16):
+        block = ciphertext[i:i+16]
+        decrypted_blocks.append(engine.decrypt_block(block))
+    full_decrypted = b"".join(decrypted_blocks)
+    return unpad(full_decrypted)
+
+def aes_encrypt_bytes_no_pad(data: bytes, key_str: str, sbox: List[int]) -> bytes:
+    """Encrypt bytes without padding; tail bytes (len % 16) are left unchanged."""
+    engine = AESEngine(_normalize_key(key_str), sbox)
+    full_len = len(data) - (len(data) % 16)
+    encrypted_blocks = []
+    for i in range(0, full_len, 16):
+        block = data[i:i+16]
+        encrypted_blocks.append(engine.encrypt_block(block))
+    return b"".join(encrypted_blocks) + data[full_len:]
+
+def aes_decrypt_bytes_no_pad(ciphertext: bytes, key_str: str, sbox: List[int]) -> bytes:
+    """Decrypt bytes without padding; tail bytes (len % 16) are left unchanged."""
+    engine = AESEngine(_normalize_key(key_str), sbox)
+    full_len = len(ciphertext) - (len(ciphertext) % 16)
+    decrypted_blocks = []
+    for i in range(0, full_len, 16):
+        block = ciphertext[i:i+16]
+        decrypted_blocks.append(engine.decrypt_block(block))
+    return b"".join(decrypted_blocks) + ciphertext[full_len:]
