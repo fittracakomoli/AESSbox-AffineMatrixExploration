@@ -2,7 +2,7 @@ import json
 import csv
 import io
 import re
-from typing import List
+from typing import List, Optional, TypedDict
 from fastapi import UploadFile, HTTPException
 from openpyxl import load_workbook
 
@@ -23,7 +23,37 @@ def _parse_sbox_token(token) -> int:
     return int(text, 10)
 
 
-async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
+class ParsedSBox(TypedDict):
+    sbox: List[int]
+    affine_matrix: Optional[List[List[int]]]
+    affine_vector: Optional[List[int]]
+
+def _parse_affine_matrix(matrix_value) -> Optional[List[List[int]]]:
+    if matrix_value is None:
+        return None
+    if not isinstance(matrix_value, list) or len(matrix_value) != 8:
+        raise ValueError("Format affine_matrix harus list 8x8.")
+    parsed_rows = []
+    for row in matrix_value:
+        if not isinstance(row, list) or len(row) != 8:
+            raise ValueError("Format affine_matrix harus list 8x8.")
+        parsed_row = [_parse_sbox_token(item) for item in row]
+        if any(val not in (0, 1) for val in parsed_row):
+            raise ValueError("Nilai affine_matrix harus 0 atau 1.")
+        parsed_rows.append(parsed_row)
+    return parsed_rows
+
+def _parse_affine_vector(vector_value) -> Optional[List[int]]:
+    if vector_value is None:
+        return None
+    if not isinstance(vector_value, list) or len(vector_value) != 8:
+        raise ValueError("Format affine_vector harus list dengan 8 elemen.")
+    parsed_vector = [_parse_sbox_token(item) for item in vector_value]
+    if any(val not in (0, 1) for val in parsed_vector):
+        raise ValueError("Nilai affine_vector harus 0 atau 1.")
+    return parsed_vector
+
+async def parse_uploaded_sbox(file: UploadFile) -> ParsedSBox:
     """
     Membaca file upload (JSON/CSV/TXT/XLSX) dan mengonversinya menjadi List[int].
     Mendukung format Desimal dan Hex (mis. "5B" atau "0x5B").
@@ -32,6 +62,8 @@ async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
     content = await file.read()
 
     sbox_data = []
+    affine_matrix = None
+    affine_vector = None
 
     try:
         # --- KASUS 1: File Excel (.xlsx) ---
@@ -61,6 +93,8 @@ async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
                 # Handle format { "sbox": [...] } atau langsung [...]
                 if isinstance(data, dict) and "sbox" in data:
                     sbox_data = [_parse_sbox_token(item) for item in data["sbox"]]
+                    affine_matrix = _parse_affine_matrix(data.get("affine_matrix", data.get("matrix")))
+                    affine_vector = _parse_affine_vector(data.get("affine_vector", data.get("vector")))
                 elif isinstance(data, list):
                     sbox_data = [_parse_sbox_token(item) for item in data]
                 else:
@@ -114,7 +148,11 @@ async def parse_uploaded_sbox(file: UploadFile) -> List[int]:
     if any(x < 0 or x > 255 for x in sbox_data):
         raise HTTPException(400, "Nilai S-box harus berada dalam rentang 0-255.")
 
-    return sbox_data
+    return {
+        "sbox": sbox_data,
+        "affine_matrix": affine_matrix,
+        "affine_vector": affine_vector
+    }
 
 def format_sbox_as_csv(sbox: List[int]) -> io.StringIO:
     """

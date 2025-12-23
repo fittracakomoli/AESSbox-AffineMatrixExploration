@@ -233,12 +233,15 @@ async def upload_sbox_endpoint(file: UploadFile = File(...)):
     Gunakan response dari endpoint ini untuk menampilkan Tabel S-box di UI.
     """
     # 1. Parsing File
-    sbox_array = await parse_uploaded_sbox(file)
+    parsed = await parse_uploaded_sbox(file)
+    sbox_array = parsed["sbox"]
     
     # 2. Return JSON ke Frontend
     return SBoxUploadResponse(
         filename=file.filename,
         sbox=sbox_array,
+        affine_matrix=parsed["affine_matrix"],
+        affine_vector=parsed["affine_vector"],
         message="S-box berhasil dimuat. Silakan cek tabel preview."
     )
 
@@ -253,6 +256,10 @@ async def download_sbox_endpoint(payload: SBoxDownloadRequest):
         clean_data = {
             "sbox": [f"{val:02X}" for val in payload.sbox]
         }
+        if payload.affine_matrix is not None:
+            clean_data["affine_matrix"] = payload.affine_matrix
+        if payload.affine_vector is not None:
+            clean_data["affine_vector"] = payload.affine_vector
         return JSONResponse(
             content=clean_data,
             headers={"Content-Disposition": 'attachment; filename="sbox_data.json"'}

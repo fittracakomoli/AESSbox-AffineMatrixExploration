@@ -28,6 +28,8 @@ class SBoxCheckResponse(BaseModel):
 class SBoxUploadResponse(BaseModel):
     filename: str
     sbox: List[int]
+    affine_matrix: Optional[List[List[int]]] = None
+    affine_vector: Optional[List[int]] = None
     message: str
 
 class ExportFormat(str, Enum):
@@ -39,6 +41,8 @@ class ExportFormat(str, Enum):
 class SBoxDownloadRequest(BaseModel):
     sbox: List[int]
     format: ExportFormat = ExportFormat.JSON
+    affine_matrix: Optional[List[List[int]]] = None
+    affine_vector: Optional[List[int]] = None
 
     @field_validator('sbox')
     def check_len(cls, v):
